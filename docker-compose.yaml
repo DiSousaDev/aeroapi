@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  db:
+    image: mysql
+    container_name: db_aero
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: aero
+    ports:
+      - "3306:3306"
+    volumes:
+      - aero_data:/var/lib/mysql
+
+volumes:
+  aero_data:

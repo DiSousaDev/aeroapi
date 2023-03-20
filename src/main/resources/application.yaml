@@ -1,0 +1,18 @@
+spring:
+  profiles:
+    active: ${APP_PROFILE:test}
+  jpa:
+    open-in-view: false
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
+
+server:
+  error:
+    include-stacktrace: never
+
+security:
+  user: ${APP_USER_PASS:user}
+  admin: ${APP_ADMIN_PASS:admin}

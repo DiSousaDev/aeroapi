@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:mysql://162.240.8.197:3306/golfoscarromeo_info?createDatabaseIfNotExist=true
+    username: golfoscarromeo_info
+    password: Z}OW^Qecoj]1
+    hikari:
+      validation-timeout: 300000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
