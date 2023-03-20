@@ -42,7 +42,7 @@ public class RegisterServiceImpl implements RegisterService {
     @Override
     @Transactional(readOnly = true)
     public RegisterResponse findByMatricula(String id) {
-        Register register = repository.findByMarcaIgnoreCase(id).orElseThrow(() ->
+        Register register = repository.findByMarcaIgnoreCase(id.replace("-", "")).orElseThrow(() ->
                 new RegisterNotFoundException("Register " + id + " não localizado."));
         RegisterResponse response = new RegisterResponse(register);
         log.info("Time [{}] Registro {} localizado. {}", LocalDateTime.now(), id, response);
