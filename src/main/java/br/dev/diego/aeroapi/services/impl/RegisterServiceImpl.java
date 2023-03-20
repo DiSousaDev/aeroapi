@@ -8,35 +8,39 @@ import br.dev.diego.aeroapi.services.RegisterService;
 import br.dev.diego.aeroapi.services.exceptions.RegisterNotFoundException;
 import br.dev.diego.aeroapi.services.util.ListUtil;
 import com.zaxxer.hikari.HikariDataSource;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 @Slf4j
-@NoArgsConstructor
-@AllArgsConstructor
 @Service
 public class RegisterServiceImpl implements RegisterService {
 
-    HikariDataSource hikariDataSource;
     @Value("${spring.jpa.properties.hibernate.jdbc.batch_size}")
     private int batchSize;
-
+    @Autowired
+    private HikariDataSource hikariDataSource;
+    @Autowired
     private RegisterRepository repository;
 
+    public RegisterServiceImpl() {
+    }
+
     @Override
+    @Transactional(readOnly = true)
     public RegisterResponse findByMatricula(String id) {
         Register register = repository.findByMarcaIgnoreCase(id).orElseThrow(() ->
                 new RegisterNotFoundException("Register " + id + " não localizado."));
@@ -47,19 +51,25 @@ public class RegisterServiceImpl implements RegisterService {
 
     @Override
     public void saveAllJdbcBatchCallable(List<RegisterInsert> registers) {
-        List<Register> list = registers.stream().map(registerInsert -> new Register(registerInsert)).collect(Collectors.toList());
+        List<Register> list = registers.stream().map(Register::new).collect(Collectors.toList());
 
-        System.out.println("insert using jdbc batch, threading");
-        ExecutorService executorService = Executors.newFixedThreadPool(hikariDataSource.getMaximumPoolSize());
+        log.info("insert using jdbc batch, threading");
+        log.info("cp size " + hikariDataSource.getMaximumPoolSize() + " batch size " + batchSize);
         List<List<Register>> listOfBookSub = ListUtil.createSubList(list, batchSize);
-        List<Callable<Void>> callables = listOfBookSub.stream().map(sublist ->
-                (Callable<Void>) () -> {
+        ExecutorService executorService = Executors.newFixedThreadPool(hikariDataSource.getMaximumPoolSize());
+        List<Callable<Integer>> callables = listOfBookSub.stream().map(sublist ->
+                (Callable<Integer>) () -> {
+                    log.info("Inserting " + sublist.size() + " using callable from thread" + Thread.currentThread().getName());
                     saveAllJDBCBatch(sublist);
-                    return null;
+                    return sublist.size();
                 }).collect(Collectors.toList());
         try {
-            executorService.invokeAll(callables);
-        } catch (InterruptedException e) {
+            List<Future<Integer>> futures = executorService.invokeAll(callables);
+            int count = 0;
+            for (Future<Integer> future : futures) {
+                count += future.get();
+            }
+        } catch (ExecutionException | InterruptedException e) {
             e.printStackTrace();
         }
 
@@ -67,10 +77,10 @@ public class RegisterServiceImpl implements RegisterService {
 
     private void saveAllJDBCBatch(List<Register> list) {
 
-        System.out.println("insert using jdbc batch");
+        log.info("insert using jdbc batch");
 
         String query = """
-                INSERT INTO %s 
+                INSERT INTO register 
                 (
                     marca,
                     proprietario,
@@ -112,10 +122,7 @@ public class RegisterServiceImpl implements RegisterService {
                 )
                 """;
 
-        String sql = String.format(
-                query,
-                Register.class.getAnnotation(Table.class).name()
-        );
+        String sql = query;
         try (Connection connection = hikariDataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)
         ) {
@@ -144,8 +151,8 @@ public class RegisterServiceImpl implements RegisterService {
                 statement.setString(20, register.getNrPassageirosMax());
                 statement.setString(21, register.getNrAssentos());
                 statement.setString(22, register.getNrAnoFabricacao());
-                statement.setString(23, register.getDtValidadeCva().toString());
-                statement.setString(24, register.getDtValidadeCa().toString());
+                statement.setString(23, register.getDtValidadeCva() != null ? register.getDtValidadeCva().toString() : null);
+                statement.setString(24, register.getDtValidadeCa() != null ? register.getDtValidadeCa().toString() : null);
                 statement.setString(25, register.getDtCanc());
                 statement.setString(26, register.getDsMotivoCanc());
                 statement.setString(27, register.getCdInterdicao());
@@ -154,8 +161,8 @@ public class RegisterServiceImpl implements RegisterService {
                 statement.setString(30, register.getCdMarcaNac3());
                 statement.setString(31, register.getCdMarcaEstrangeira());
                 statement.setString(32, register.getDsGravame());
-                statement.setString(33, register.getDtMatricula().toString());
-                statement.setString(34, register.getUltimaAtualizacao().toString());
+                statement.setString(33, register.getDtMatricula() != null ? register.getDtMatricula().toString() : null);
+                statement.setString(34, register.getUltimaAtualizacao() != null ? register.getUltimaAtualizacao().toString() : null);
                 statement.addBatch();
                 if ((counter + 1) % batchSize == 0 || (counter + 1) == list.size()) {
                     statement.executeBatch();

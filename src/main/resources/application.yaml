@@ -3,11 +3,6 @@ spring:
     active: ${APP_PROFILE:test}
   jpa:
     open-in-view: false
-  batch:
-    jdbc:
-      initialize-schema: always
-    job:
-      enabled: false
 
 server:
   error:
